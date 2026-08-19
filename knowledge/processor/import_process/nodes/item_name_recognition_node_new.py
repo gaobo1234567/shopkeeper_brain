@@ -299,12 +299,12 @@ class ItemNameRecognitionNode(BaseNode):
 import  json
 if __name__ == '__main__':
     # 1. 读取chunk.json
-    chunk_json_path = r"D:\pycharmprojects\shopkeeper_brain\knowledge\processor\import_process\output_temp_dir\万用表的使用\hybrid_auto\chunks.json"
+    chunk_json_path = r"D:\pycharmprojects\shopkeeper_brain\knowledge\temp_data\20260819\ca49d645-38fb-4d17-ab13-2339d7ce973c\chunks.json"
     with open(chunk_json_path, "r", encoding="utf-8") as f:
         chunk_content = json.load(f)
     # 2. 构建state
     state = {
-        "file_title": "万用表的使用",
+        "file_title": "hak180使用说明书",
         "chunks": chunk_content
     }
 
