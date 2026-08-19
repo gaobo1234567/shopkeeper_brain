@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# PyCharm
+.idea/
+
+# Real environment secrets
+.env
+*.env
+
+# Keep template env files
+!.env.example
+
+# Docker/local data
+volumes/
+data/
+
+# Import temporary files
+knowledge/processor/import_process/import_temp_dir/
+knowledge/processor/import_process/output_temp_dir/
+knowledge/temp_data/
+
+# Runtime/generated output
+output/
+
+# Python cache / test artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local docs / temporary tests
+docs/
+knowledge/test/
+
+# Local debug / backup files
+knowledge/processor/query_process/nodes/mcp_clash_test.py
+knowledge/processor/query_process/nodes/mcp_search_node_bak.py

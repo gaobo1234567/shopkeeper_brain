@@ -9,7 +9,7 @@ from knowledge.utils.llm_client_util import get_llm_client
 from knowledge.utils.milvus_util import get_milvus_client
 from knowledge.utils.bge_m3_embedding_util import get_beg_m3_embedding_model
 from knowledge.prompts.upload.import_prompt import ITEM_NAME_SYSTEM_PROMPT, \
-    ITEM_NAME_USER_PROMPT_TEMPLATE
+    ITEM_NAME_USER_PROMPT_TEMPLATE,ITEM_NAME_USER_PROMPT_TEMPLATE_NEW
 
 
 class ItemNameRecognitionNode(BaseNode):
@@ -61,31 +61,86 @@ class ItemNameRecognitionNode(BaseNode):
         return file_title, chunks, config
 
     def _prepare_item_name_context(self, chunks: Optional[List[Dict[str, Any]]], config):
+        """
+        构建商品名识别上下文。
 
+        优化策略：
+        1. 优先选择标题中更可能包含“对象名称/型号/产品信息”的 chunk；
+        2. 再使用文档前 item_name_chunk_k 个 chunk 作为补充；
+        3. 去重，并继续遵守 item_name_chunk_size 的总字符数限制。
+
+        注意：该方法最终仍返回 str，不改变下游 LLM 调用接口。
+        """
         self.log_step("step2", "构建商品名提取的上下文")
-        result = []
-        # 我要从前5块（item_name_chunk_k）中留下内容的字符数不能超过2500个（item_name_chunk_size）字符长度（双重限制）
-        total = 0
-        for index, chunk in enumerate(chunks[:config.item_name_chunk_k]):
 
-            # 1. 判断chunk的类型
+        if not chunks:
+            return ""
+
+        # 这些关键词只用于“提高候选 chunk 的优先级”，并不是强约束。
+        # 同时包含产品类和更通用的文档对象类词汇，避免只适用于技术说明书。
+        priority_keywords = (
+            "产品", "商品", "型号", "规格", "参数", "简介", "概述", "名称",
+            "设备", "品牌", "系列", "版本", "服务", "方案", "对象", "介绍",
+            "product", "model", "specification", "specifications", "overview",
+            "introduction", "name", "brand", "series", "version", "service"
+        )
+
+        # 1. 收集“标题高信息量”的 chunk。
+        priority_chunks = []
+        for index, chunk in enumerate(chunks):
             if not isinstance(chunk, dict):
                 continue
-            ## 构建上下文：【切片-1】标题+ body组成( content:标题+\n\n +body)
-            # 2. 提取
-            content = chunk.get('content')
-            spices = f"【切片】- {index + 1} - {content}"
 
-            # 3. 计算长度
-            total += len(spices)
+            title = str(chunk.get("title") or "").lower()
+            parent_title = str(chunk.get("parent_title") or "").lower()
+            heading_text = f"{title} {parent_title}"
 
-            result.append(spices)
+            if any(keyword.lower() in heading_text for keyword in priority_keywords):
+                priority_chunks.append((index, chunk))
 
-            # 4. 判断是收集到的长度否超过阈值设定
-            if total > config.item_name_chunk_size:
+        # 2. 再补充原来的“前 K 个 chunk”，保留原策略的稳定性。
+        front_chunks = [
+            (index, chunk)
+            for index, chunk in enumerate(chunks[:config.item_name_chunk_k])
+            if isinstance(chunk, dict)
+        ]
+
+        # 3. 按“高信息 chunk -> 前 K 个 chunk”的顺序去重。
+        candidates = []
+        seen_indices = set()
+        for index, chunk in priority_chunks + front_chunks:
+            if index in seen_indices:
+                continue
+            seen_indices.add(index)
+            candidates.append((index, chunk))
+
+        # 4. 拼接上下文，并严格限制总字符数。
+        result = []
+        total = 0
+        max_chars = config.item_name_chunk_size
+
+        for index, chunk in candidates:
+            content = str(chunk.get("content") or "").strip()
+            if not content:
+                continue
+
+            piece = f"【切片】- {index + 1} - {content}"
+            separator_len = 2 if result else 0  # 对应后面的 \n\n
+            remaining = max_chars - total - separator_len
+
+            if remaining <= 0:
                 break
 
-        return "\n\n".join(result)[:config.item_name_chunk_size]
+            # 最后一块可以截断，保证最终字符串不超过 item_name_chunk_size。
+            if len(piece) > remaining:
+                result.append(piece[:remaining])
+                total += separator_len + remaining
+                break
+
+            result.append(piece)
+            total += separator_len + len(piece)
+
+        return "\n\n".join(result)
 
     def _recognition_item_name_by_llm(self, file_title: str, item_name_context: str) -> str:
 
@@ -97,7 +152,7 @@ class ItemNameRecognitionNode(BaseNode):
             return file_title
 
         # 2. 构建LLM提示词(格式化用户提示词模版)
-        prompt = ITEM_NAME_USER_PROMPT_TEMPLATE.format(file_title=file_title, context=item_name_context)
+        prompt = ITEM_NAME_USER_PROMPT_TEMPLATE_NEW.format(file_title=file_title, context=item_name_context)
 
         # 3. 调用模型(# str [] # PromptValue/XXXMessage的content不能放带变量的字符串)得到AI message
         try:
@@ -275,6 +330,3 @@ if __name__ == '__main__':
         "item_name"
     }
     """
-
-
-

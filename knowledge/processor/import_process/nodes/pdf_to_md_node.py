@@ -35,7 +35,7 @@ class PdfToMdNode(BaseNode):
 
         # 5. 返回state
         return state
-
+  
     def _validate_state_inputs_path(self, state: ImportGraphState) -> Tuple[Path, Path]:
         """
 
@@ -94,13 +94,17 @@ class PdfToMdNode(BaseNode):
             "-p",
             str(import_file_path),
             "-o",
-            str(file_dir_path),
-            "--source",
-            "local"
+            str(file_dir_path)
         ]
 
+        import os
         import time
+
+        env = os.environ.copy()
+        env["MINERU_MODEL_SOURCE"] = "local"
+
         process_start_time = time.time()
+
         # 2. 执行命令行(子进程执行命令行) 自动读取到主进程的环境变量
         proc = subprocess.Popen(args=cmd,
                                 stdout=subprocess.PIPE,#标准日志输出
@@ -108,7 +112,8 @@ class PdfToMdNode(BaseNode):
                                 errors="replace",  # ？ 或者空心的菱形
                                 text=True,  # 输出的内容是字符串 不是字节
                                 encoding="utf-8",  # 用指定的中文字符集  进行编解码
-                                bufsize=1  # 按行缓冲区  只要缓冲区一行满了就给我
+                                bufsize=1,# 按行缓冲区  只要缓冲区一行满了就给我
+                                env=env
                                 )
 
         #  3. 获取日志信息

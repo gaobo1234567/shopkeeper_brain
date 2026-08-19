@@ -1,9 +1,6 @@
 """
-导入流程节点基类
-
-定义统一的节点接口规范，提供通用功能
+导入流程节点基类：定义统一的节点接口规范，提供通用功能
 """
-
 from abc import ABC, abstractmethod
 from typing import TypeVar, Optional
 import logging
@@ -13,7 +10,6 @@ from knowledge.processor.import_process.exceptions import ImportProcessError
 from knowledge.utils.task_util import add_running_task, add_done_task
 
 T = TypeVar("T")  # 泛型状态类型
-
 
 class BaseNode(ABC):
     """
@@ -40,7 +36,6 @@ class BaseNode(ABC):
     def __init__(self, config: Optional[ImportConfig] = None):
         """
         初始化节点
-
         Args:
             config: 配置对象，默认使用全局配置
         """

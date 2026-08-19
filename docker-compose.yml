@@ -1,0 +1,133 @@
+services:
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.25
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: always
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: always
+
+  standalone:
+    container_name: shopkeeper-milvus-standalone
+    image: milvusdb/milvus:v2.5.5
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MQ_TYPE: rocksmq
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    restart: always
+    depends_on:
+      - etcd
+      - minio
+
+  attu:
+    container_name: attu
+    image: zilliz/attu:v2.5.10
+    environment:
+      - MILVUS_URL=standalone:19530
+      - ATTU_LOG_LEVEL=info
+      - SERVER_PORT=7000
+    ports:
+      - "7000:7000"
+    restart: always
+    depends_on:
+      - standalone
+
+  neo4j:
+    container_name: neo4j
+    image: neo4j:2025-community
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/neo4j/logs:/logs
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/neo4j/config:/config
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/neo4j/data:/data
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/neo4j/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/hzk123456
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p hzk123456 'RETURN 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb:
+    container_name: mongodb
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongodb/data:/data/db
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongodb/config:/data/configdb
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    name: milvus
+
+
+#启动容器方法 docker compose up -d
+#这会启动MinIO ，Milvus ，Neo4j ，MongoDB以及 Milvus 需要的 etcd、Attu
+
+#查看状态 docker compose ps
+
+#停止容器方法 docker compose down
+
+#访问attu：http://localhost:7000
+#访问minio：http://localhost:9000
+#访问neo4j： http://localhost:7474
+  #用户名：neo4j 密码：hzk123456
+  #现在直接使用客户端neo4j desktop连接
+
+# 执行docker exec -it mongodb mongosh进入命令行版本mongodb数据库
+# 使用 MongoDB Compass客户端连接 mongodb://localhost:27017
+

@@ -118,7 +118,6 @@ class MarkDownImageNode(BaseNode):
 
     def _scan_images_and_context(self, image_dir: Path, md_content: str, config) -> List[
         Tuple[str, str, Tuple[str, str, str]]]:
-
         """
         扫描图片并且 找到图片的上下文
         Args:
@@ -129,7 +128,6 @@ class MarkDownImageNode(BaseNode):
           List[Tuple[str,str,Tuple[str,str,str]]]
           List[("图片名字",“图片的地址”,("离图片最近的上面一个标题","图片的上文","图片的下文"))]
         """
-
         self.log_step("step2", f"扫描图片文件目录{image_dir}")
         target_images_context = []
 

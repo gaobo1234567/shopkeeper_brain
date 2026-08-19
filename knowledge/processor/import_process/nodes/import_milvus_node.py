@@ -23,7 +23,7 @@ from knowledge.utils.milvus_util import get_milvus_client
 类1：MilvusSchemaBuilder:专门负责对Milvus的约束操作
 类2：MilvusIndexBuilder:专门负责对Milvus的索引操作
 类3：MilvusInserter:专门负责对Milvus做插入操作
-
+   
 Milvus的约束：
 # 1.主键字段约束：唯一性最强
 # 2.向量字段约束：唯一性还行
@@ -51,7 +51,6 @@ _SCALAR_FIELDS: Sequence[ScalarFieldSpec] = (
     ScalarFieldSpec(field_name="file_title", datatype=DataType.VARCHAR, max_length=65535),
     ScalarFieldSpec(field_name="item_name", datatype=DataType.VARCHAR, max_length=65535), # 标量字段的过滤检索【注意】
 )
-
 
 class _MilvusSchemaBuilder:
     """
@@ -100,7 +99,6 @@ class _MilvusSchemaBuilder:
         # 5. 返回
         return schema
 
-
 class _MilvusIndexBuilder:
     """
     职责：负责处理Milvus的索引
@@ -133,7 +131,6 @@ class _MilvusIndexBuilder:
         # 3. 返回index
         return index
 
-
 class _MilvusInserter:
     """
     职责：将数据插入到Milvus 以及 回填chunk_id
@@ -159,7 +156,6 @@ class _MilvusInserter:
     def _fill_chunk_ids(self, chunks: List[Dict[str, Any]], ids: List[Any]):
         for chunk, id in zip(chunks, ids):
             chunk["chunk_id"] = id
-
 
 class ImportMilvusNode(BaseNode):
     name = "import_milvus_node"

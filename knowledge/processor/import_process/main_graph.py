@@ -5,13 +5,12 @@ from langgraph.graph.state import CompiledStateGraph
 from knowledge.processor.import_process.state import ImportGraphState
 from knowledge.processor.import_process.nodes.pdf_to_md_node import PdfToMdNode
 from knowledge.processor.import_process.nodes.entry_node import EntryNode
-from knowledge.processor.import_process.nodes.md_img_node import MarkDownImageNode
-from knowledge.processor.import_process.nodes.document_split_node import DocumentSplitNode
-from knowledge.processor.import_process.nodes.item_name_recognition_node import ItemNameRecognitionNode
-from knowledge.processor.import_process.nodes.bge_embedding_chunks_node import BgeEmbeddingChunksNode
-from knowledge.processor.import_process.nodes.import_milvus_node  import ImportMilvusNode
+from knowledge.processor.import_process.nodes.md_img_node_new import MarkDownImageNode
+from knowledge.processor.import_process.nodes.document_split_node_new import DocumentSplitNode
+from knowledge.processor.import_process.nodes.item_name_recognition_node_new import ItemNameRecognitionNode
+from knowledge.processor.import_process.nodes.bge_embedding_chunks_node_new import BgeEmbeddingChunksNode
+from knowledge.processor.import_process.nodes.import_milvus_node_new import ImportMilvusNode
 from knowledge.processor.import_process.nodes.kg_graph_node import KnowLedgeGraphNode
-from knowledge.processor.import_process.nodes.md_img_node import MarkDownImageNode
 from knowledge.processor.import_process.state import create_default_state
 from knowledge.processor.import_process.base import setup_logging
 

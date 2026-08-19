@@ -99,6 +99,8 @@ class DocumentSplitNode(BaseNode):
         return md_content, file_title, config.max_content_length, config.min_content_length
 
     def _split_by_headings(self, md_content: str, file_title: str) -> List[dict]:
+        # ToDo 文档的切分没有考虑图片处理，导致图片地址信息也被融入content中
+        # 导致两个问题：（1）地址信息会污染向量化过程。（2）检索时返回原图片困难。
         """
     根据MD的标题（1-6）级标题进行切分
     Args:
