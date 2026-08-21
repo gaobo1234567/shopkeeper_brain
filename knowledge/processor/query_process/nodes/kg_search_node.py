@@ -455,6 +455,18 @@ class _EntityAligner:
 
         # 4. 解析结果
         hits = reps[0] if reps else []
+        print(f"\n===== ALIGN DEBUG: {entity_name} =====")
+
+        for rank, hit in enumerate(hits, start=1):
+            entity = hit.get("entity", {})
+            print(
+                f"Rank {rank}: "
+                f"entity_name={entity.get('entity_name')}, "
+                f"score={hit.get('distance')}, "
+                f"source_chunk_id={entity.get('source_chunk_id')}"
+            )
+
+        print("=" * 60)
         if not hits:
             return [{"original": entity_name, "aligned": "", "score": "", "reason": "no_hit"}]
 
@@ -761,9 +773,9 @@ class _Neo4jGraphReader:
         if not seed_nodes:
             return []
 
-        # 2. 判断 one_hop_relations 是否存在
-        if not one_hop_relations:
-            return []
+        # 2. one_hop_relations 为空时不能直接返回。
+        #    即使种子节点没有普通一跳关系，种子节点自身仍可能通过
+        #    MENTIONED_IN 关系关联到正确 chunk，因此后续仍需保留 seed_nodes。
         # 存放所有节点（种子节点和邻居节点的权重）
         weight_map: Dict[Tuple[str, str], float] = {}
         seen = set()
@@ -1011,7 +1023,15 @@ class KnowledgeGraphSearchNode(BaseNode):
         # 2. 各个组件执行各种的业务
         # 2.1 利用提取器组件、对齐器组件提取实体以及对齐后的实体（LLM+Milvus）
         entities_name = entity_extractor.extract(user_query=validated_query)
+        print("\n========== KG DEBUG ==========")
+        print("[1] validated_query:", validated_query)
+        print("[2] LLM entities:", entities_name)
         entities_name_aligned: Dict[str, Any] = entity_aligner.align(entities_name, item_names=validated_item_names)
+        print(
+            "[3] Alignment details:",
+            entities_name_aligned.get("entities_aligned_elements")
+        )
+        print("==============================\n")
         # 获取所有对齐后的实体名(业务逻辑不使用)
         aligned_entities_name = entities_name_aligned.get('entities_aligned_name')
         # 获取所有对齐后的实体详情（结构信息细粒）
@@ -1053,18 +1073,13 @@ if __name__ == '__main__':
     # 其它路（语义相似这一路会根据我的语义相似查询）
     kg_search_node = KnowledgeGraphSearchNode()
     state = {
-        # "rewritten_query": "RS-12数字万用表如何测量直流电压",    （没有查询到）
-        #"rewritten_query": "RS-12数字万用表如何进行直流电压的测量",# （没有查询到）
-        # "rewritten_query": "RS-12数字万用表如何打开背光灯键",
-         "rewritten_query": "RS-12数字万用表更换电池需要注意什么",
-        # "rewritten_query": "RS-12数字万用表更换电池需要注意什么",   # 1.0
-        # "rewritten_query": "RS-12数字万用表如何测量电阻",  # 1.0  （没有查询到）
-        # "rewritten_query": "RS-12数字万用表如何进行电阻测量",  # 1.0
-        # "rewritten_query": "在RS-12 数字万用表中二极管的操作步骤是什么",
-        # "rewritten_query": "RS-12数字万",
-        # "item_names": ["RS-12数字万用表"]
-        "item_names": ["数字万用表"]
+        # "rewritten_query": "华为擎云L540x隐私开关控制哪个硬件？",
+        # "item_names": ["华为擎云 L540x 计算机"]
+        "rewritten_query": "华为擎云L540有线网络连接需要哪些转接组件？",
+        "item_names": ["华为擎云 L540 计算机"]
+        # "rewritten_query": "HAK180电源连接涉及哪个接口和组件？",
+        # "item_names": ["hak180 烫金机"]
+
     }
     result = kg_search_node.process(state)
-
     print(result)

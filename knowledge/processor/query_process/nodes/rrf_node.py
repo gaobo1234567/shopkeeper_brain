@@ -24,8 +24,8 @@ class RrfNode(BaseNode):
         # 2. 为不同路的搜索结果设置不同的权重
         search_source = {
             "vector_search_result": (self._normalize_input(vector_search_chunks), 1.0),
-            "hyde_search_result": (self._normalize_input(hyde_search_chunks), 1.0),
-            "kg_search_result": (self._normalize_input(kg_search_chunks), 0.7)
+            "hyde_search_result": (self._normalize_input(hyde_search_chunks), 0.9),
+            "kg_search_result": (self._normalize_input(kg_search_chunks), 0.4)
         }
         # 3. 构建rrf_inputs
         rrf_inputs = list(search_source.values())

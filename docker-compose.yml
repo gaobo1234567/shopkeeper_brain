@@ -122,7 +122,7 @@ networks:
 
 #停止容器方法 docker compose down
 
-#访问attu：http://localhost:7000
+#访问attu(milvus)：http://localhost:7000
 #访问minio：http://localhost:9000
 #访问neo4j： http://localhost:7474
   #用户名：neo4j 密码：hzk123456

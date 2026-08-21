@@ -61,3 +61,6 @@ knowledge/test/
 # Local debug / backup files
 knowledge/processor/query_process/nodes/mcp_clash_test.py
 knowledge/processor/query_process/nodes/mcp_search_node_bak.py
+export.py
+knowledge/processor/query_process/nodes/dense_search_node.py
+knowledge_chunks_export.json

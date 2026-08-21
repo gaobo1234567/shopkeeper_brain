@@ -1,0 +1,235 @@
+{
+  "summary": {
+    "dataset_size": 10,
+    "item_name_confirm_rate": 1.0,
+    "mean_recall_at_1": 0.65,
+    "mean_recall_at_3": 0.95,
+    "mean_recall_at_5": 0.95,
+    "mrr_at_5": 0.8333333333333333
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "question": "RS-12 数字万用表如何测量直流电压？",
+      "category": "operation",
+      "item_name": "RS-12 数字万用表",
+      "gold_titles": [
+        "## 直流电压测量"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646585"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646587",
+        "468489822519646586",
+        "468489822519646585"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 0.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 0.3333333333333333
+    },
+    {
+      "id": "q002",
+      "question": "RS-12 的直流电压20V档分辨率和精确度是多少？",
+      "category": "parameter",
+      "item_name": "RS-12 数字万用表",
+      "gold_titles": [
+        "## 功能符号指示"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646579"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646587",
+        "468489822519646579",
+        "468489822519646586"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 0.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 0.5
+    },
+    {
+      "id": "q003",
+      "question": "RS-12 测量10A直流电流时最长可以连续测多久？",
+      "category": "safety",
+      "item_name": "RS-12 数字万用表",
+      "gold_titles": [
+        "## 直流电流测量"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646587"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646587",
+        "468489822519646576",
+        "468489822519646575"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 1.0
+    },
+    {
+      "id": "q004",
+      "question": "RS-12 做短路蜂鸣测试时，电阻小于多少会响？",
+      "category": "fact",
+      "item_name": "RS-12 数字万用表",
+      "gold_titles": [
+        "## 短路蜂鸣测试"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646589"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646589",
+        "468489822519646588",
+        "468489822519646575"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 1.0
+    },
+    {
+      "id": "q005",
+      "question": "RS-12 显示BAT符号是什么意思，应该怎么处理？",
+      "category": "maintenance",
+      "item_name": "RS-12 数字万用表",
+      "gold_titles": [
+        "## 更换电池",
+        "## 功能符号指示"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646592",
+        "468489822519646579"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646592",
+        "468489822519646577",
+        "468489822519646586"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 0.5,
+      "recall_at_3": 0.5,
+      "recall_at_5": 0.5,
+      "rr_at_5": 1.0
+    },
+    {
+      "id": "q006",
+      "question": "HAK180 烫金机支持的介质长度、宽度和重量范围分别是多少？",
+      "category": "parameter",
+      "item_name": "hak180 烫金机",
+      "gold_titles": [
+        "# 使用说明书- 16"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646796"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646796",
+        "468489822519646822",
+        "468489822519646780"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 1.0
+    },
+    {
+      "id": "q007",
+      "question": "HAK180 装入标准尺寸介质时，纸张应该以什么方向放入进纸托板？",
+      "category": "operation",
+      "item_name": "hak180 烫金机",
+      "gold_titles": [
+        "## 5.3.1 装入标准尺寸介质-1- 20"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646800"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646801",
+        "468489822519646800",
+        "468489822519646798"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 0.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 0.5
+    },
+    {
+      "id": "q008",
+      "question": "HAK180 的 Cover Lock 指示灯亮起表示什么？",
+      "category": "fact",
+      "item_name": "hak180 烫金机",
+      "gold_titles": [
+        "# 使用说明书- 8"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646784"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646784",
+        "468489822519646783",
+        "468489822519646818"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 1.0
+    },
+    {
+      "id": "q009",
+      "question": "HAK180 第一次开机时如何选择液晶显示屏语言？",
+      "category": "operation",
+      "item_name": "hak180 烫金机",
+      "gold_titles": [
+        "# 使用说明书- 11"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646788"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646788",
+        "468489822519646803",
+        "468489822519646777"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 1.0
+    },
+    {
+      "id": "q010",
+      "question": "HAK180 出现“无进纸”并发生卡纸时应该怎么处理？",
+      "category": "troubleshooting",
+      "item_name": "hak180 烫金机",
+      "gold_titles": [
+        "# 8 故障排除- 2"
+      ],
+      "gold_chunk_ids": [
+        "468489822519646817"
+      ],
+      "retrieved_chunk_ids": [
+        "468489822519646817",
+        "468489822519646798",
+        "468489822519646818",
+        "468489822519646819"
+      ],
+      "item_name_confirmed": true,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "rr_at_5": 1.0
+    }
+  ]
+}

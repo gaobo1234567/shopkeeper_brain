@@ -1,0 +1,174 @@
+[
+  {
+    "id": "q021",
+    "question": "RS-12的电压测量功能涉及哪些端口？",
+    "item_name": "RS-12 数字万用表",
+    "category": "entity_relation",
+    "gold_titles": [
+      "## 控制与端口",
+      "## 直流电压测量"
+    ],
+    "gold_chunk_ids": [
+      468489822519646578,
+      468489822519646585
+    ]
+  },
+  {
+    "id": "q022",
+    "question": "RS-12进行电阻测量时红黑表笔分别连接哪里？",
+    "item_name": "RS-12 数字万用表",
+    "category": "multi-hop",
+    "gold_titles": [
+      "## 电阻测量",
+      "## 控制与端口"
+    ],
+    "gold_chunk_ids": [
+      468489822519646588,
+      468489822519646578
+    ]
+  },
+  {
+    "id": "q023",
+    "question": "RS-12电池不足提示与哪个维护操作相关？",
+    "item_name": "RS-12 数字万用表",
+    "category": "entity_relation",
+    "gold_titles": [
+      "## 功能符号指示",
+      "## 更换电池"
+    ],
+    "gold_chunk_ids": [
+      468489822519646579,
+      468489822519646592
+    ]
+  },
+  {
+    "id": "q031",
+    "question": "华为擎云L540进入BIOS和恢复默认设置分别使用什么按键？",
+    "item_name": "华为擎云 L540 计算机",
+    "category": "multi-hop",
+    "gold_titles": [
+      "## 2.1 进入 BIOS 设置界面的方法",
+      "## 操作方法"
+    ],
+    "gold_chunk_ids": [
+      468489822519647394,
+      468489822519647397
+    ]
+  },
+  {
+    "id": "q032",
+    "question": "华为擎云L540有线网络连接需要哪些转接组件？",
+    "item_name": "华为擎云 L540 计算机",
+    "category": "entity_relation",
+    "gold_titles": [
+      "## 3.2 HUAWEI Mini RJ45 转 RJ45 转接线"
+    ],
+    "gold_chunk_ids": [
+      468489822519647407
+    ]
+  },
+  {
+    "id": "q033",
+    "question": "华为设备护眼模式与操作系统有什么关系？",
+    "item_name": "华为擎云 L540x 计算机",
+    "category": "multi-hop",
+    "gold_titles": [
+      "## 2.1 KOS 系统开启方式",
+      "## 2.2 UOS 系统开启方式"
+    ],
+    "gold_chunk_ids": [
+      468489822519647674,
+      468489822519647675
+    ]
+  },
+  {
+    "id": "q034",
+    "question": "华为擎云L540x隐私开关控制哪个硬件？",
+    "item_name": "华为擎云 L540x 计算机",
+    "category": "entity_relation",
+    "gold_titles": [
+      "## 1.1 外观介绍"
+    ],
+    "gold_chunk_ids": [
+      468489822519647665
+    ]
+  },
+  {
+    "id": "q035",
+    "question": "RS-12不同测量功能对应哪些量程？",
+    "item_name": "RS-12 数字万用表",
+    "category": "entity_relation",
+    "gold_titles": [
+      "## 功能符号指示"
+    ],
+    "gold_chunk_ids": [
+      468489822519646579
+    ]
+  },
+  {
+    "id": "q036",
+    "question": "RS-12安全限制和电流测量有什么关系？",
+    "item_name": "RS-12 数字万用表",
+    "category": "multi-hop",
+    "gold_titles": [
+      "## 安全手册",
+      "## 直流电流测量"
+    ],
+    "gold_chunk_ids": [
+      468489822519646576,
+      468489822519646587
+    ]
+  },
+  {
+    "id": "q037",
+    "question": "HAK180装入介质和进纸托板有什么关系？",
+    "item_name": "hak180 烫金机",
+    "category": "multi-hop",
+    "gold_titles": [
+      "# 使用说明书- 5",
+      "## 5.3.1 装入标准尺寸介质-1- 20"
+    ],
+    "gold_chunk_ids": [
+      468489822519646780,
+      468489822519646800
+    ]
+  },
+  {
+    "id": "q038",
+    "question": "HAK180电源连接涉及哪个接口和组件？",
+    "item_name": "hak180 烫金机",
+    "category": "entity_relation",
+    "gold_titles": [
+      "# 使用说明书- 10"
+    ],
+    "gold_chunk_ids": [
+      468489822519646787
+    ]
+  },
+  {
+    "id": "q039",
+    "question": "华为擎云L540充电安全和长期存放有什么关系？",
+    "item_name": "华为擎云 L540x 计算机",
+    "category": "multi-hop",
+    "gold_titles": [
+      "## 4.9 充电器安全"
+    ],
+    "gold_chunk_ids": [
+      468489822519647694
+    ]
+  },
+  {
+    "id": "q040",
+    "question": "RS-12端口、测量模式和操作步骤如何关联？",
+    "item_name": "RS-12 数字万用表",
+    "category": "multi-hop",
+    "gold_titles": [
+      "## 控制与端口",
+      "## 直流电压测量"
+    ],
+    "gold_chunk_ids": [
+      468489822519646578,
+      468489822519646585
+    ]
+  }
+]
