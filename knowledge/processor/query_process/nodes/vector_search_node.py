@@ -15,49 +15,87 @@ from knowledge.utils.milvus_util import get_milvus_client, create_hybrid_search_
 class VectorSearchNode(BaseNode):
     name = "vector_search_node"
 
-    def process(self, state: QueryGraphState) -> Union[QueryGraphState,Dict[str, Any]] :
-        # 1. 参数校验
-        validated_query, validate_item_names = self._validate_query_inputs(state)
+    def process(self, state: QueryGraphState) -> Union[QueryGraphState, Dict[str, Any]]:
 
-        # 2. 获取嵌入模型&milvus客户端
-        embedding_model = get_beg_m3_embedding_model()
-        milvus_client = get_milvus_client()
-        if embedding_model is None or milvus_client is None:
-            return state
+        try:
+            # 1. 参数校验
+            validated_query, validate_item_names = self._validate_query_inputs(state)
+            # raise RuntimeError("模拟 Hybrid Milvus 服务故障")
 
-        # 3. 对问题向量化
-        embedding_result = generate_hybrid_embeddings(embedding_model,embedding_documents=[validated_query])
-        if not embedding_result:
-            return state
+            # 2. 获取嵌入模型 & Milvus 客户端
+            embedding_model = get_beg_m3_embedding_model()
+            milvus_client = get_milvus_client()
 
-        # 4. 构建过滤表达式
-        # 目的：让之后的问题向量在chunk构成的库中按照validate_item_names去寻找
-        # 也就是在指定的文档里面去寻找相似chunk，而不是盲目比较所有chunk
-        item_name_filter_expr = self._item_name_filter(validate_item_names)
-        # 5. 创建混合搜索请求
-        hybrid_requests = create_hybrid_search_requests(
-            dense_vector=embedding_result['dense'][0],
-            sparse_vector=embedding_result['sparse'][0],
-            expr=item_name_filter_expr,
-            limit=5
-        )
+            if embedding_model is None or milvus_client is None:
+                self.logger.warning(
+                    "Hybrid Embedding 或 Milvus 客户端初始化失败，当前分支降级为空结果"
+                )
+                return {"embedding_chunks": []}
 
-        # 6. 执行混合搜索请求
-        reps = execute_hybrid_search_query(
-            milvus_client=milvus_client,
-            collection_name=self.config.chunks_collection,
-            search_requests=hybrid_requests,
-            # ranker_weights=(0.5, 0.5),
-            norm_score=True,
-            output_fields=["chunk_id", "content", "item_name"]
-        )
-        if not reps or not reps[0]:
-            return state
+            # 3. 对问题向量化
+            embedding_result = generate_hybrid_embeddings(
+                embedding_model,
+                embedding_documents=[validated_query]
+            )
 
-        # 7. 更新state的embedding_chunks
-        # state['embedding_chunks'] = reps[0]
-        # return  state
-        return {"embedding_chunks":reps[0]}
+            if not embedding_result:
+                self.logger.warning(
+                    "Hybrid Embedding 生成失败，当前分支降级为空结果"
+                )
+                return {"embedding_chunks": []}
+
+            # 4. 构建 item_name 过滤表达式
+            item_name_filter_expr = self._item_name_filter(
+                validate_item_names
+            )
+
+            # 5. 创建混合搜索请求
+            hybrid_requests = create_hybrid_search_requests(
+                dense_vector=embedding_result["dense"][0],
+                sparse_vector=embedding_result["sparse"][0],
+                expr=item_name_filter_expr,
+                limit=5
+            )
+
+            # 6. 执行 Milvus 混合搜索
+            reps = execute_hybrid_search_query(
+                milvus_client=milvus_client,
+                collection_name=self.config.chunks_collection,
+                search_requests=hybrid_requests,
+                norm_score=True,
+                output_fields=[
+                    "chunk_id",
+                    "content",
+                    "item_name"
+                ]
+            )
+
+            if not reps or not reps[0]:
+                self.logger.warning(
+                    "Hybrid 未检索到结果，当前分支返回空结果"
+                )
+                return {"embedding_chunks": []}
+
+            # 7. 正常返回 Hybrid 检索结果
+            return {
+                "embedding_chunks": reps[0]
+            }
+
+        except StateFieldError:
+            # State 字段错误属于程序逻辑问题，不做降级
+            raise
+
+        except Exception as e:
+            # Embedding / Milvus 等运行时依赖异常：
+            # 只让 Hybrid 当前分支失败，不影响 HyDE / KG
+            self.logger.exception(
+                "Hybrid Retriever 运行异常，当前分支降级为空结果: %s",
+                e
+            )
+
+            return {
+                "embedding_chunks": []
+            }
 
     def _validate_query_inputs(self, state: QueryGraphState) -> Tuple[str, List[str]]:
 
@@ -86,7 +124,7 @@ class VectorSearchNode(BaseNode):
 if __name__ == '__main__':
     state = {
         "rewritten_query": "万用表如何测量电阻",
-        "item_names": ["数字万用表"] #和数据库里的item_names对齐
+        "item_names": ["RS-12 数字万用表"] #和数据库里的item_names对齐
     }
 
     vector_search = VectorSearchNode()

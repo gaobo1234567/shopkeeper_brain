@@ -969,17 +969,48 @@ class KnowledgeGraphSearchNode(BaseNode):
     name = "kg_search_node"
 
     def process(self, state: QueryGraphState) -> Union[QueryGraphState, Dict[str, Any]]:
-        # 1. 参数校验
-        validated_query, validated_item_names = self._validate_inputs(state)
+        try:
+            # 1. 参数校验
+            validated_query, validated_item_names = self._validate_inputs(state)
 
-        # 2. 执行流水线
-        kg_result:Dict[str,Any] = self._run_pipeline(validated_query, validated_item_names)
+            # 2. 执行 KG 流水线
+            kg_result: Dict[str, Any] = self._run_pipeline(
+                validated_query,
+                validated_item_names
+            )
 
-        # 3. 只更新state中的kg_chunks、kg_triples
-        return {
-            "kg_chunks":kg_result.get('kg_chunks'),
-            "kg_triples": kg_result.get('kg_triples')
-        }
+            # 3. KG 没有有效结果时，显式返回空结果。
+            #    后续 RRF 可以继续使用 Hybrid / HyDE 的结果完成融合。
+            if not kg_result:
+                self.logger.warning(
+                    "KG Pipeline 未返回有效结果，当前分支降级为空结果"
+                )
+                return {
+                    "kg_chunks": [],
+                    "kg_triples": []
+                }
+
+            # 4. 正常返回 KG 检索结果
+            return {
+                "kg_chunks": kg_result.get("kg_chunks") or [],
+                "kg_triples": kg_result.get("kg_triples") or []
+            }
+
+        except StateFieldError:
+            # State 字段错误属于 Graph 契约/程序逻辑问题，不能静默降级。
+            raise
+
+        except Exception as e:
+            # LLM / Embedding / Milvus / Neo4j 等运行时依赖异常：
+            # 只让 KG 当前分支失败，不影响 Hybrid / HyDE。
+            self.logger.exception(
+                "KG Retriever 运行异常，当前分支降级为空结果: %s",
+                e
+            )
+            return {
+                "kg_chunks": [],
+                "kg_triples": []
+            }
 
     def _validate_inputs(self, state: QueryGraphState) -> Tuple[str, List[str]]:
         # 1. 获取参数

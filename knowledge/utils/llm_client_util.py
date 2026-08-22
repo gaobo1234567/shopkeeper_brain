@@ -1,4 +1,5 @@
-import os, logging
+import os
+import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -8,65 +9,82 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-cache_llm_client = {} #用来保存已经创建过的客户端对象。
+# 用来保存已经创建过的客户端对象
+cache_llm_client = {}
 
 
-def get_llm_client(mode_name: str = None, temperature: float = 0.0, response_format: bool = False):
+def get_llm_client(
+    mode_name: str = None,
+    temperature: float = 0.0,
+    response_format: bool = False
+):
+    """
+    返回 LLM 客户端对象。
+
+    缓存：
+        value: ChatOpenAI client
+        key: 不同模型 + 不同响应格式
     """
 
-    Returns: 返回LLM客户端对象
-    # 自己加的提供:dashscope
-    # 兼容OpenAI: LangChain LangGraph(集成OpenAI)
-    缓存的对象是：client
-    缓存的key: 不同的节点用不同的模型以及同一个节点用不同响应格式
-    """
+    # 1. 获取模型配置
+    model_name = mode_name or os.getenv("ITEM_MODEL")
+    api_key = os.getenv("OPENAI_API_KEY")
+    api_base = os.getenv("OPENAI_API_BASE")
 
-    # 1. 获取模型的名字
-    model_name = mode_name or os.getenv('ITEM_MODEL')
-    api_key = os.getenv('OPENAI_API_KEY')
-    api_base = os.getenv('OPENAI_API_BASE')
+    # 2. 获取 LLM Timeout
+    llm_timeout_seconds = float(
+        os.getenv("LLM_TIMEOUT_SECONDS", "10")
+    )
 
-    cache_key = (mode_name, response_format)  # 复合缓存key(a,b)
+    # 3. 客户端缓存 key
+    cache_key = (
+        model_name,
+        response_format
+    )
 
-    # 2. 缓存命中 直接返回已有客户端
+    # 4. 缓存命中
     if cache_key in cache_llm_client:
         return cache_llm_client[cache_key]
 
-    # 3. 返回的内容格式
+    # 5. 返回内容格式
     model_kwargs = {}
+
     if response_format:
-        model_kwargs['response_format'] = {"type": "json_object"}
+        model_kwargs["response_format"] = {
+            "type": "json_object"
+        }
+
     try:
-        # 4. 定义模型实例
+        # 6. 创建 LLM 客户端
         client = ChatOpenAI(
             model_name=model_name,
             openai_api_key=api_key,
             openai_api_base=api_base,
             temperature=temperature,
-            #extra_body={"enable_thinking": False},
+            # LLM 请求最多允许执行多少秒
+            timeout=llm_timeout_seconds,
             model_kwargs=model_kwargs
         )
 
-        # 5. 同步数据，将新创建的客户端存入缓存中
+        # 7. 缓存客户端
         cache_llm_client[cache_key] = client
 
-        # 6. 返回
+        # 8. 返回客户端
         return client
+
     except Exception as e:
-        logger.error(f"LLM客户端创建失败,原因:{str(e)}")
+        logger.error(
+            "LLM客户端创建失败, 原因: %s",
+            str(e)
+        )
         return None
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     llm_client = get_llm_client()
-
     import json
-
-    # ai_message = llm_client.invoke("你好，请问您是谁?")
-    # 使用模型本质发送请求（底层将model_kwargs的所有参数都在发送请求之前拼接到请求体身上）
-    ai_message = llm_client.invoke("您好，请给我讲一个笑话，返回json格式：{\"key\":\"value\"}")
+    ai_message = llm_client.invoke('您好，请给我讲一个笑话，返回json格式：{"key":"value"}')
     print(ai_message.content)
-    print(type(ai_message.content)) # <class 'str'>
-    # json对象 json字符串
+    print(type(ai_message.content))
     json_object = json.loads(ai_message.content)
-    print(type(json_object))  # <class 'dict'>
+    print(type(json_object))

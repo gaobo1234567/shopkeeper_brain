@@ -109,6 +109,20 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+  redis:
+    container_name: redis
+    image: redis:7.2
+    ports:
+      - "6379:6379"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/redis/data:/data
+    command: redis-server --appendonly yes
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   default:
@@ -116,7 +130,7 @@ networks:
 
 
 #启动容器方法 docker compose up -d
-#这会启动MinIO ，Milvus ，Neo4j ，MongoDB以及 Milvus 需要的 etcd、Attu
+#这会启动MinIO ，Milvus ，Neo4j ，MongoDB、Redis以及 Milvus 需要的 etcd、Attu
 
 #查看状态 docker compose ps
 

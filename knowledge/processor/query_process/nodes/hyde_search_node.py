@@ -3,7 +3,8 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+import hashlib
+from knowledge.utils.redis_util import get_redis_client
 from typing import List, Tuple, Union,Any,Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 from knowledge.processor.query_process.state import QueryGraphState
@@ -15,51 +16,207 @@ from knowledge.prompts.query.query_prompt import USER_HYDE_PROMPT_TEMPLATE
 from knowledge.utils.milvus_util import get_milvus_client, create_hybrid_search_requests, execute_hybrid_search_query
 from knowledge.utils.bge_m3_embedding_util import generate_hybrid_embeddings, get_beg_m3_embedding_model
 
-
+HYDE_CACHE_TTL_SECONDS = 24 * 60 * 60
 class HyDeSearchNode(BaseNode):
     name = "hyde_search_node"
 
-    def process(self, state: QueryGraphState) -> Union[QueryGraphState,Dict[str,Any]]:
+    def _build_hyde_cache_key(
+            self,
+            validated_query: str,
+            validate_item_names: List[str]
+    ) -> str:
+        """
+        根据问题和商品名生成稳定的 Redis 缓存键。
+        """
+        normalized_query = " ".join(validated_query.split()).strip()
 
-        # 1. 参数校验
-        validated_query, validate_item_names = self._validate_query_inputs(state)
+        normalized_item_names = sorted(
+            name.strip()
+            for name in validate_item_names
+            if name and name.strip()
+        )
 
-        # 2. 生成假设性文档
-        hy_document = self._generate_hy_document(validated_query, validate_item_names)
+        raw_key = (
+                normalized_query
+                + "|"
+                + "|".join(normalized_item_names)
+        )
 
-        # 3. 获取嵌入模型 & milvus客户端
-        embedding_model = get_beg_m3_embedding_model()
-        milvus_client = get_milvus_client()
-        if not embedding_model or not milvus_client:
-            return state
+        digest = hashlib.sha256(
+            raw_key.encode("utf-8")
+        ).hexdigest()
 
-        # 4. 假设性文档嵌入(注入问题+假设性文档)
-        embedding_document = f"{validated_query}\n{hy_document}"
-        embedding_result = generate_hybrid_embeddings(embedding_model, embedding_documents=[embedding_document])
+        return f"hyde:{digest}"
 
-        if not embedding_result:
-            return state
+    def _get_cached_hy_document(
+            self,
+            cache_key: str
+    ) -> str:
+        """
+        从 Redis 获取 HyDE 假设文档。
 
-        # 5. 获取item_name的过滤表达式
-        item_name_filtered_expr = self._item_name_filte_expr(validate_item_names)
+        Redis 异常时直接视为缓存未命中，
+        不影响主查询流程。
+        """
+        try:
+            redis_client = get_redis_client()
 
-        # 6. 创建混合搜索请求
-        hybrid_search_requests = create_hybrid_search_requests(dense_vector=embedding_result['dense'][0],
-                                                               sparse_vector=embedding_result['sparse'][0],
-                                                               expr=item_name_filtered_expr)
+            if redis_client is None:
+                return ""
 
-        # 7. 执行混合搜索请求
-        reps = execute_hybrid_search_query(milvus_client,
-                                           collection_name=self.config.chunks_collection,
-                                           search_requests=hybrid_search_requests,
-                                           norm_score=True,
-                                           output_fields=["chunk_id", "content", "item_name"])
+            cached_document = redis_client.get(cache_key)
 
-        if not reps or not reps[0]:
-            return state
+            if cached_document:
+                self.logger.info(
+                    "HyDE 缓存命中 key=%s",
+                    cache_key
+                )
+                return cached_document
 
-        # 8. 只更新hyde_embedding_chunks
-        return {"hyde_embedding_chunks":reps[0]}
+            self.logger.info(
+                "HyDE 缓存未命中 key=%s",
+                cache_key
+            )
+
+            return ""
+
+        except Exception as e:
+            self.logger.warning(
+                "读取 HyDE 缓存失败，继续调用 LLM: %s",
+                e
+            )
+            return ""
+
+    def _set_cached_hy_document(
+            self,
+            cache_key: str,
+            hy_document: str
+    ) -> None:
+        """
+        将 HyDE 假设文档写入 Redis。
+        """
+        if not hy_document:
+            return
+
+        try:
+            redis_client = get_redis_client()
+
+            if redis_client is None:
+                return
+
+            redis_client.set(
+                cache_key,
+                hy_document,
+                ex=HYDE_CACHE_TTL_SECONDS
+            )
+
+            self.logger.info(
+                "HyDE 缓存写入成功 key=%s ttl=%s",
+                cache_key,
+                HYDE_CACHE_TTL_SECONDS
+            )
+
+        except Exception as e:
+            self.logger.warning(
+                "写入 HyDE 缓存失败，不影响主流程: %s",
+                e
+            )
+    def process(self, state: QueryGraphState) -> Union[QueryGraphState, Dict[str, Any]]:
+
+        try:
+            # 1. 参数校验
+            validated_query, validate_item_names = self._validate_query_inputs(state)
+
+            # 2. 生成假设性文档
+            hy_document = self._generate_hy_document(
+                validated_query,
+                validate_item_names
+            )
+
+            # HyDE 文档生成失败：
+            # 不影响其他 Retriever，当前 HyDE 分支直接降级为空结果
+            if not hy_document:
+                self.logger.warning(
+                    "HyDE 假设性文档生成失败，当前分支降级为空结果"
+                )
+                return {"hyde_embedding_chunks": []}
+
+            # 3. 获取嵌入模型 & Milvus 客户端
+            embedding_model = get_beg_m3_embedding_model()
+            milvus_client = get_milvus_client()
+
+            if not embedding_model or not milvus_client:
+                self.logger.warning(
+                    "HyDE Embedding 或 Milvus 客户端初始化失败，当前分支降级为空结果"
+                )
+                return {"hyde_embedding_chunks": []}
+
+            # 4. 假设性文档嵌入
+            embedding_document = f"{validated_query}\n{hy_document}"
+
+            embedding_result = generate_hybrid_embeddings(
+                embedding_model,
+                embedding_documents=[embedding_document]
+            )
+
+            if not embedding_result:
+                self.logger.warning(
+                    "HyDE Embedding 生成失败，当前分支降级为空结果"
+                )
+                return {"hyde_embedding_chunks": []}
+
+            # 5. 获取 item_name 的过滤表达式
+            item_name_filtered_expr = self._item_name_filte_expr(
+                validate_item_names
+            )
+
+            # 6. 创建混合搜索请求
+            hybrid_search_requests = create_hybrid_search_requests(
+                dense_vector=embedding_result["dense"][0],
+                sparse_vector=embedding_result["sparse"][0],
+                expr=item_name_filtered_expr
+            )
+
+            # 7. 执行 Milvus 混合搜索
+            reps = execute_hybrid_search_query(
+                milvus_client,
+                collection_name=self.config.chunks_collection,
+                search_requests=hybrid_search_requests,
+                norm_score=True,
+                output_fields=[
+                    "chunk_id",
+                    "content",
+                    "item_name"
+                ]
+            )
+
+            if not reps or not reps[0]:
+                self.logger.warning(
+                    "HyDE 未检索到结果，当前分支返回空结果"
+                )
+                return {"hyde_embedding_chunks": []}
+
+            # 8. 正常返回 HyDE 检索结果
+            return {
+                "hyde_embedding_chunks": reps[0]
+            }
+
+        except StateFieldError:
+            # rewritten_query / item_names 等 State 契约错误，
+            # 属于程序逻辑问题，不能悄悄降级
+            raise
+
+        except Exception as e:
+            # LLM / Embedding / Milvus 等运行时依赖异常：
+            # 只让 HyDE 当前分支失败，不影响 Hybrid / KG
+            self.logger.exception(
+                "HyDE Retriever 运行异常，当前分支降级为空结果: %s",
+                e
+            )
+
+            return {
+                "hyde_embedding_chunks": []
+            }
 
     def _validate_query_inputs(self, state: QueryGraphState) -> Tuple[str, List[str]]:
 
@@ -79,55 +236,75 @@ class HyDeSearchNode(BaseNode):
         # 4. 返回
         return rewritten_query, item_names
 
-    def _generate_hy_document(self, validated_query: str, validate_item_names: List[str]) -> str:
+    def _generate_hy_document(
+            self,
+            validated_query: str,
+            validate_item_names: List[str]
+    ) -> str:
 
-        # 1. 获取LLM客户端
+        # 1. 构造缓存键
+        cache_key = self._build_hyde_cache_key(
+            validated_query,
+            validate_item_names
+        )
+
+        # 2. 先查 Redis
+        cached_document = self._get_cached_hy_document(
+            cache_key
+        )
+
+        if cached_document:
+            return cached_document
+
+        # 3. 缓存未命中，再调用 LLM
         llm_client = get_llm_client()
 
-        # 2. 判断
         if llm_client is None:
             return ""
 
-        # 3. 获取系统提示词以及用户提示词
-        user_prompt = USER_HYDE_PROMPT_TEMPLATE.format(item_hint=validate_item_names, rewritten_query=validated_query)
-        system_prompt = f"您是一位{validate_item_names}的技术文档领域的专家，主要擅长编写技术文档、操作手册、文档规格说明"
+        user_prompt = USER_HYDE_PROMPT_TEMPLATE.format(
+            item_hint=validate_item_names,
+            rewritten_query=validated_query
+        )
+
+        system_prompt = (
+            f"您是一位{validate_item_names}的技术文档领域的专家，"
+            "主要擅长编写技术文档、操作手册、文档规格说明"
+        )
+
         try:
-            # 4. 获取AIMessage
             llm_response = llm_client.invoke([
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_prompt)
             ])
 
-            # 5. 获取内容
-            llm_response_content = getattr(llm_response, 'content', "").strip()
+            llm_response_content = getattr(
+                llm_response,
+                "content",
+                ""
+            ).strip()
 
-            # 6. 判断是否存在
             if not llm_response_content:
                 return ""
 
+            # 4. LLM 成功后写入 Redis
+            self._set_cached_hy_document(
+                cache_key,
+                llm_response_content
+            )
+
             return llm_response_content
+
         except Exception as e:
-            self.logger.error(f"LLM调用失败:{str(e)}")
+            self.logger.error(
+                f"LLM调用失败:{str(e)}"
+            )
             return ""
 
     def _item_name_filte_expr(self, validate_item_names: List[str]) -> str:
         quoted = ", ".join(f'"{v}"' for v in validate_item_names)
         return f" item_name in [{quoted}]"
 
-
-if __name__ == '__main__':
-
-    state = {
-        "rewritten_query": "万用表如何测量电阻",
-        "item_names": ["数字万用表"]  # 对齐字段
-    }
-
-    vector_search = HyDeSearchNode()
-
-    result = vector_search.process(state)
-
-    for r in result.get('hyde_embedding_chunks'):
-        print(json.dumps(r, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
     from knowledge.processor.query_process.base import setup_logging
@@ -141,7 +318,7 @@ if __name__ == "__main__":
 
     mock_state = {
         "rewritten_query": "RS-12 数字万用表如何测量直流电压？",
-        "item_names": ["数字万用表"],
+        "item_names": ["RS-12 数字万用表"],
     }
 
     print("【输入状态】:")

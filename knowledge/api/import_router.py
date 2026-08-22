@@ -59,17 +59,55 @@ def register_router(app: FastAPI):
         return FileResponse(path=os.path.join(get_front_page_dir(), "import.html"))
 
     # 2. 上传请求
-    @app.post("/upload", response_model=UploadResponse)
-    async def upload_file_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...),
-                                   service: ImportFileService = Depends(get_import_file_service)):
-        # 1. 上传文件（本地/minio）
-        task_id, file_dir, import_file_path = service.process_upload_file(file)
+    @app.post(
+        "/upload",
+        response_model=UploadResponse
+    )
+    async def upload_file_endpoint(
+            background_tasks: BackgroundTasks,
+            file: UploadFile = File(...),
+            service: ImportFileService = Depends(
+                get_import_file_service
+            )
+    ):
+        # 1. 文件落盘 + SHA256 + 幂等检查
+        (
+            task_id,
+            file_dir,
+            import_file_path,
+            file_sha256,
+            is_duplicate
+        ) = service.process_upload_file(file)
 
-        # 2. 运行后台任务（跑graph的整个流程）
-        background_tasks.add_task(service.run_import_graph, task_id, file_dir, import_file_path)
+        # ========================================================
+        # 2. 已经完整导入过
+        # ========================================================
 
-        # 3. 返回
-        return UploadResponse(message="文件上传成功", task_id=task_id)
+        if is_duplicate:
+            # 不再启动 ImportGraph
+            return UploadResponse(
+                message="该文件已经导入，无需重复处理",
+                task_id=task_id
+            )
+
+        # ========================================================
+        # 3. 新文件
+        # ========================================================
+
+        background_tasks.add_task(
+            service.run_import_graph,
+            task_id,
+            file_dir,
+            import_file_path,
+            file_sha256,
+            file.filename
+        )
+
+        # 4. 返回任务
+        return UploadResponse(
+            message="文件上传成功",
+            task_id=task_id
+        )
 
     # 3. 查询任务的状态
     @app.get("/status/{task_id}", response_model=TaskStatusResponse)

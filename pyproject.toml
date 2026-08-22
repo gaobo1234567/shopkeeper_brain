@@ -27,6 +27,7 @@ dependencies = [
     "pymilvus[model]>=3.0.0",
     "pymongo>=4.17.0",
     "python-dotenv>=1.2.2",
+    "redis>=8.1.0",
     "sentence-transformers>=5.5.1",
     "torch==2.8.0+cu128",
     "torchvision==0.23.0+cu128",

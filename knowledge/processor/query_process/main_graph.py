@@ -7,7 +7,6 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 from dotenv import load_dotenv
 from knowledge.processor.query_process.state import QueryGraphState
-
 from knowledge.processor.query_process.nodes.answer_output_node import AnswerOutputNode
 from knowledge.processor.query_process.nodes.item_name_confirm_node import ItemNameConfirmNode
 from knowledge.processor.query_process.nodes.vector_search_node import VectorSearchNode
@@ -16,6 +15,7 @@ from knowledge.processor.query_process.nodes.mcp_search_node import McpSearchNod
 from knowledge.processor.query_process.nodes.kg_search_node import KnowledgeGraphSearchNode
 from knowledge.processor.query_process.nodes.rrf_node import RrfNode
 from knowledge.processor.query_process.nodes.rerank_node import RerankNode
+import time
 # 加载环境变量
 load_dotenv()
 
@@ -156,32 +156,44 @@ if __name__ == "__main__":
     print(f"  session_id: {mock_state_1['session_id']}")
     print(f"  is_stream: {mock_state_1['is_stream']}")
 
+    print("\n" + "=" * 60)
+    print("第 1 次查询：冷启动")
+    print("=" * 60)
+
+    start_time_1 = time.perf_counter()
+
     result_1 = query_app.invoke(mock_state_1)
+
+    total_latency_ms_1 = (
+                                 time.perf_counter() - start_time_1
+                         ) * 1000
+
+    print(
+        f"\n【第 1 次端到端总耗时】: "
+        f"{total_latency_ms_1:.2f} ms "
+        f"({total_latency_ms_1 / 1000:.2f} s)"
+    )
+
+    print("\n" + "=" * 60)
+    print("第 2 次查询：热运行")
+    print("=" * 60)
+
+    start_time_2 = time.perf_counter()
+
+    result_2 = query_app.invoke(mock_state_1)
+
+    total_latency_ms_2 = (
+                                 time.perf_counter() - start_time_2
+                         ) * 1000
+
+    print(
+        f"\n【第 2 次端到端总耗时】: "
+        f"{total_latency_ms_2:.2f} ms "
+        f"({total_latency_ms_2 / 1000:.2f} s)"
+    )
 
     print(f"\n  【结果】:")
     print(f"  商品名: {result_1.get('item_names')}")
     print(f"  重写查询: {result_1.get('rewritten_query')}")
     answer_1 = result_1.get("answer", "")
     print(f"  答案: {answer_1[:200]}..." if len(answer_1) > 200 else f"  答案: {answer_1}")
-
-    # ---- 测试场景 2：商品名模糊，被拦截 ----
-    # print("\n\n【场景 2】: 商品名模糊，被拦截返回选项")
-    # print("-" * 60)
-    # mock_state_2 = {
-    #     "original_query": "万用表怎么测电压？",
-    #     "session_id": "test_session_main_graph",
-    #     "task_id": "test_task_002",
-    #     "is_stream": False,
-    # }
-    #
-    # print(f"  查询: {mock_state_2['original_query']}")
-    #
-    # result_2 = query_app.invoke(mock_state_2)
-    #
-    # print(f"\n  【结果】:")
-    # print(f"  商品名: {result_2.get('item_names')}")
-    # answer_2 = result_2.get("answer", "")
-    # print(f"  答案: {answer_2}")
-    #
-    # print("\n" + "=" * 60)
-    # print("全部测试完成")

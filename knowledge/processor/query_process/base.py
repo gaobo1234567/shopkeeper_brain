@@ -12,7 +12,7 @@ from knowledge.processor.query_process.exceptions import QueryProcessError
 from knowledge.utils.sse_util import push_sse_event
 from knowledge.utils.task_util import add_running_task, add_done_task, get_done_task_list, get_running_task_list, \
     get_task_status
-
+import time
 T = TypeVar("T")  # 泛型状态类型
 
 
@@ -52,41 +52,55 @@ class BaseNode(ABC):
         self.logger = logging.getLogger(f"query.{self.name}")
 
     def __call__(self, state: T) -> T:
-        """节点执行入口。
-
-        LangGraph 调用节点时会调用此方法。
-        提供统一的日志输出、任务追踪和异常处理。
-
-        Args:
-            state: 图状态字典。
-
-        Returns:
-            更新后的状态字典。
-
-        Raises:
-            QueryProcessError: 节点执行失败时抛出。
-        """
 
         task_id = state.get("task_id", "")
         is_stream = state.get("is_stream", False)
 
+        start_time = time.perf_counter()
+
         try:
-            self.logger.info(f"--- {self.name} 开始 ---")
+            self.logger.info(
+                "node=%s task_id=%s status=start",
+                self.name,
+                task_id
+            )
+
             if task_id:
                 add_running_task(task_id, self.name)
+
                 if is_stream:
                     self._push_progress(task_id)
 
             result = self.process(state)
-            self.logger.info(f"--- {self.name} 完成 ---")
+
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+            self.logger.info(
+                "node=%s task_id=%s status=success latency_ms=%.2f",
+                self.name,
+                task_id,
+                elapsed_ms
+            )
+
             if task_id:
                 add_done_task(task_id, self.name)
+
                 if is_stream:
                     self._push_progress(task_id)
 
             return result
+
         except Exception as e:
-            self.logger.error(f"{self.name} 执行失败: {e}")
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+            self.logger.error(
+                "node=%s task_id=%s status=failed latency_ms=%.2f error=%s",
+                self.name,
+                task_id,
+                elapsed_ms,
+                e
+            )
+
             raise QueryProcessError(
                 message=str(e),
                 node_name=self.name,

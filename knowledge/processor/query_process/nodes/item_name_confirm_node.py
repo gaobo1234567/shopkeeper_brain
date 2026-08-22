@@ -475,33 +475,39 @@ class ItemNameExtractor:
             "你是一个专业的客服助手，"
             "擅长理解用户意图和提取关键信息。"
         )
-
-        llm_response = llm_client.invoke(
-            [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=human_prompt)
-            ]
-        )
-
-        llm_content = llm_response.content.strip()
-
-        if not llm_content:
-            return result
-
         try:
+            llm_response = llm_client.invoke(
+                [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=human_prompt)
+                ]
+            )
 
+            llm_content = getattr(
+                llm_response,
+                "content",
+                ""
+            ).strip()
+
+            if not llm_content:
+                return result
+
+        except Exception as e:
+            logger.warning(
+                "商品名称提取 LLM 调用失败，使用默认结果降级: %s",
+                e
+            )
+            return result
+        try:
             parsed_result = self._clean_parse(llm_content)
-
             result["rewritten_query"] = (
                 parsed_result.get("rewritten_query")
                 or original_query
             )
-
             result["item_names"] = (
                 parsed_result.get("item_names")
                 or []
             )
-
         except Exception as e:
 
             logger.error(
