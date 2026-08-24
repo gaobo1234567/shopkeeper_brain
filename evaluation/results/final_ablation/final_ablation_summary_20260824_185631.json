@@ -1,0 +1,292 @@
+{
+  "experiment": "shopkeeper_brain_final_controlled_ablation",
+  "timestamp": "20260824_185631",
+  "dataset_path": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\datasets\\KG专项evaluation_dataset_40_final.json",
+  "dataset_sha256": "b7afd19e2ad81c76c3b7e0a876d3b4f989e07ac3e1312c72cb7c68ea6d4371bc",
+  "dataset_size": 40,
+  "execution_design": {
+    "retrieval_runs_per_question": 1,
+    "dense_runs_per_question": 1,
+    "cross_encoder_score_runs_per_question": 1,
+    "E_is_alias_of_G": true
+  },
+  "candidate_pool_diagnostics": {
+    "metric_scope": "unordered recall over the complete candidate union; not Recall@K",
+    "mean_hybrid_candidate_recall": 0.925,
+    "mean_hybrid_hyde_union_recall": 0.975,
+    "mean_hybrid_hyde_kg_union_recall": 0.975,
+    "questions_where_hyde_adds_new_gold": 3,
+    "questions_where_kg_adds_new_gold_beyond_hybrid_hyde": 0
+  },
+  "summaries": [
+    {
+      "mode": "dense",
+      "group": "A",
+      "label": "Dense",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.45,
+      "mean_recall_at_3": 0.7875,
+      "mean_recall_at_5": 0.925,
+      "mrr_at_5": 0.7133333333333333
+    },
+    {
+      "mode": "hybrid",
+      "group": "B",
+      "label": "Hybrid",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.525,
+      "mean_recall_at_3": 0.7875,
+      "mean_recall_at_5": 0.925,
+      "mrr_at_5": 0.7675
+    },
+    {
+      "mode": "hybrid_hyde",
+      "group": "C",
+      "label": "Hybrid + HyDE + RRF",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.55,
+      "mean_recall_at_3": 0.8,
+      "mean_recall_at_5": 0.925,
+      "mrr_at_5": 0.78625
+    },
+    {
+      "mode": "hybrid_hyde_kg",
+      "group": "D",
+      "label": "Hybrid + HyDE + KG + RRF",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.45,
+      "mean_recall_at_3": 0.775,
+      "mean_recall_at_5": 0.8875,
+      "mrr_at_5": 0.6924999999999999
+    },
+    {
+      "mode": "full",
+      "group": "E",
+      "label": "Full (RRF + CrossEncoder + cliff cutoff)",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.4875,
+      "mean_recall_at_3": 0.725,
+      "mean_recall_at_5": 0.7375,
+      "mrr_at_5": 0.6666666666666666
+    },
+    {
+      "mode": "rrf_rerank_no_cutoff",
+      "group": "F",
+      "label": "RRF + CrossEncoder (ranking only)",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.4875,
+      "mean_recall_at_3": 0.725,
+      "mean_recall_at_5": 0.8,
+      "mrr_at_5": 0.6716666666666666
+    },
+    {
+      "mode": "rrf_rerank_cliff",
+      "group": "G",
+      "label": "RRF + CrossEncoder + cliff cutoff",
+      "dataset_size": 40,
+      "mean_recall_at_1": 0.4875,
+      "mean_recall_at_3": 0.725,
+      "mean_recall_at_5": 0.7375,
+      "mrr_at_5": 0.6666666666666666
+    }
+  ],
+  "mode_result_files": {
+    "dense": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_A_dense_20260824_185631.json",
+    "hybrid": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_B_hybrid_20260824_185631.json",
+    "hybrid_hyde": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_C_hybrid_hyde_20260824_185631.json",
+    "hybrid_hyde_kg": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_D_hybrid_hyde_kg_20260824_185631.json",
+    "full": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_E_full_20260824_185631.json",
+    "rrf_rerank_no_cutoff": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_F_rrf_rerank_no_cutoff_20260824_185631.json",
+    "rrf_rerank_cliff": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_G_rrf_rerank_cliff_20260824_185631.json"
+  },
+  "chunk_id_checks": {
+    "sequence_sha256": {
+      "dense": "0fb08207ff95b877cd7191272f0f54958632cf97b3f34b80f780bbae31a9a164",
+      "hybrid": "6f7e2207a54e7f2a3630713511d124b4dd2112c59546fb98dafb0ce69b4f3cb5",
+      "hybrid_hyde": "60c079aebca30f9fa6a2517e569a67b5d95ac23f2fd36aa2c19ce66da04ecdab",
+      "hybrid_hyde_kg": "a59e734c60aedc12e8dbacbae74b53f164b3ce153547a02a6130b812772c2582",
+      "full": "d1c7558a54264445721d26100e4b6ded3cac159b5c277d254fe63f6aca458abc",
+      "rrf_rerank_no_cutoff": "4f345c336ba2808e300c593a7ad11f8d540647092ccd2ce8e936024ecdcabe5a",
+      "rrf_rerank_cliff": "d1c7558a54264445721d26100e4b6ded3cac159b5c277d254fe63f6aca458abc"
+    },
+    "pairwise": [
+      {
+        "left_group": "A",
+        "left_mode": "dense",
+        "right_group": "B",
+        "right_mode": "hybrid",
+        "different_question_count": 32,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "A",
+        "left_mode": "dense",
+        "right_group": "C",
+        "right_mode": "hybrid_hyde",
+        "different_question_count": 39,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "A",
+        "left_mode": "dense",
+        "right_group": "D",
+        "right_mode": "hybrid_hyde_kg",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "A",
+        "left_mode": "dense",
+        "right_group": "E",
+        "right_mode": "full",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "A",
+        "left_mode": "dense",
+        "right_group": "F",
+        "right_mode": "rrf_rerank_no_cutoff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "A",
+        "left_mode": "dense",
+        "right_group": "G",
+        "right_mode": "rrf_rerank_cliff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "B",
+        "left_mode": "hybrid",
+        "right_group": "C",
+        "right_mode": "hybrid_hyde",
+        "different_question_count": 39,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "B",
+        "left_mode": "hybrid",
+        "right_group": "D",
+        "right_mode": "hybrid_hyde_kg",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "B",
+        "left_mode": "hybrid",
+        "right_group": "E",
+        "right_mode": "full",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "B",
+        "left_mode": "hybrid",
+        "right_group": "F",
+        "right_mode": "rrf_rerank_no_cutoff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "B",
+        "left_mode": "hybrid",
+        "right_group": "G",
+        "right_mode": "rrf_rerank_cliff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "C",
+        "left_mode": "hybrid_hyde",
+        "right_group": "D",
+        "right_mode": "hybrid_hyde_kg",
+        "different_question_count": 30,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "C",
+        "left_mode": "hybrid_hyde",
+        "right_group": "E",
+        "right_mode": "full",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "C",
+        "left_mode": "hybrid_hyde",
+        "right_group": "F",
+        "right_mode": "rrf_rerank_no_cutoff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "C",
+        "left_mode": "hybrid_hyde",
+        "right_group": "G",
+        "right_mode": "rrf_rerank_cliff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "D",
+        "left_mode": "hybrid_hyde_kg",
+        "right_group": "E",
+        "right_mode": "full",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "D",
+        "left_mode": "hybrid_hyde_kg",
+        "right_group": "F",
+        "right_mode": "rrf_rerank_no_cutoff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "D",
+        "left_mode": "hybrid_hyde_kg",
+        "right_group": "G",
+        "right_mode": "rrf_rerank_cliff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "E",
+        "left_mode": "full",
+        "right_group": "F",
+        "right_mode": "rrf_rerank_no_cutoff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      },
+      {
+        "left_group": "E",
+        "left_mode": "full",
+        "right_group": "G",
+        "right_mode": "rrf_rerank_cliff",
+        "different_question_count": 0,
+        "identical_all_questions": true
+      },
+      {
+        "left_group": "F",
+        "left_mode": "rrf_rerank_no_cutoff",
+        "right_group": "G",
+        "right_mode": "rrf_rerank_cliff",
+        "different_question_count": 40,
+        "identical_all_questions": false
+      }
+    ],
+    "data_flow_assertions": {
+      "B_reads_embedding_chunks": true,
+      "C_reads_rrf_chunks": true,
+      "D_reads_rrf_chunks": true,
+      "E_F_G_read_reranked_docs": true,
+      "G_is_prefix_of_F": true,
+      "E_equals_G_expected_alias": true
+    }
+  },
+  "result_path": "D:\\pycharmprojects\\shopkeeper_brain\\evaluation\\results\\final_ablation\\final_ablation_summary_20260824_185631.json"
+}

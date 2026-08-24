@@ -53,6 +53,8 @@ RAG Retrieval 离线评测脚本
 import json
 import os
 import uuid
+import hashlib
+import argparse
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -96,6 +98,7 @@ from knowledge.utils.bge_m3_embedding_util import (
     generate_hybrid_embeddings
 )
 from knowledge.processor.query_process.base import BaseNode
+from knowledge.processor.query_process.config import get_config
 
 # ============================================================
 # 路径配置
@@ -114,8 +117,30 @@ DATASET_PATH = os.path.join(
 RESULT_DIR = os.path.join(
     CURRENT_DIR,
     "results",
-    "RRF_weight_test"
+    "final_ablation"
 )
+
+
+def configure_evaluation_paths(dataset: str, result_subdir: str) -> None:
+    """显式选择评测集，并保证结果仍写在 evaluation/results 下。"""
+    global DATASET_PATH, RESULT_DIR
+
+    dataset_path = (
+        dataset
+        if os.path.isabs(dataset)
+        else os.path.join(CURRENT_DIR, "datasets", dataset)
+    )
+    dataset_path = os.path.abspath(dataset_path)
+    if not os.path.isfile(dataset_path):
+        raise FileNotFoundError(f"找不到评测集：{dataset_path}")
+
+    results_root = os.path.abspath(os.path.join(CURRENT_DIR, "results"))
+    result_dir = os.path.abspath(os.path.join(results_root, result_subdir))
+    if os.path.commonpath([results_root, result_dir]) != results_root:
+        raise ValueError("result_subdir 必须位于 evaluation/results 下")
+
+    DATASET_PATH = dataset_path
+    RESULT_DIR = result_dir
 
 
 # ============================================================
@@ -126,6 +151,80 @@ K_VALUES = [1, 3, 5]
 
 MRR_K = 5
 
+RRF_WEIGHTS = {
+    "hybrid": 1.0,
+    "hyde": 0.9,
+    "kg": 0.4,
+}
+
+MODE_SPECS = {
+    "dense": {
+        "group": "A",
+        "label": "Dense",
+        "output_field": "reranked_docs",
+        "active_retrievers": ["dense"],
+        "use_rrf": False,
+        "use_rerank": False,
+        "use_cliff_cutoff": False,
+    },
+    "hybrid": {
+        "group": "B",
+        "label": "Hybrid",
+        "output_field": "embedding_chunks",
+        "active_retrievers": ["hybrid"],
+        "use_rrf": False,
+        "use_rerank": False,
+        "use_cliff_cutoff": False,
+    },
+    "hybrid_hyde": {
+        "group": "C",
+        "label": "Hybrid + HyDE + RRF",
+        "output_field": "rrf_chunks",
+        "active_retrievers": ["hybrid", "hyde"],
+        "use_rrf": True,
+        "use_rerank": False,
+        "use_cliff_cutoff": False,
+    },
+    "hybrid_hyde_kg": {
+        "group": "D",
+        "label": "Hybrid + HyDE + KG + RRF",
+        "output_field": "rrf_chunks",
+        "active_retrievers": ["hybrid", "hyde", "kg"],
+        "use_rrf": True,
+        "use_rerank": False,
+        "use_cliff_cutoff": False,
+    },
+    "full": {
+        "group": "E",
+        "label": "Full (RRF + CrossEncoder + cliff cutoff)",
+        "output_field": "reranked_docs",
+        "active_retrievers": ["hybrid", "hyde", "kg"],
+        "use_rrf": True,
+        "use_rerank": True,
+        "use_cliff_cutoff": True,
+    },
+    "rrf_rerank_no_cutoff": {
+        "group": "F",
+        "label": "RRF + CrossEncoder (ranking only)",
+        "output_field": "reranked_docs",
+        "active_retrievers": ["hybrid", "hyde", "kg"],
+        "use_rrf": True,
+        "use_rerank": True,
+        "use_cliff_cutoff": False,
+    },
+    "rrf_rerank_cliff": {
+        "group": "G",
+        "label": "RRF + CrossEncoder + cliff cutoff",
+        "output_field": "reranked_docs",
+        "active_retrievers": ["hybrid", "hyde", "kg"],
+        "use_rrf": True,
+        "use_rerank": True,
+        "use_cliff_cutoff": True,
+    },
+}
+
+FINAL_MODES = list(MODE_SPECS)
+
 
 # ============================================================
 # 1. 创建 Retrieval Evaluation Graph
@@ -134,15 +233,63 @@ class NormalizeRetrievalNode(BaseNode):
 
     name = "normalize_retrieval_node"
 
+    def __init__(self, source_field: str):
+        super().__init__()
+        self.source_field = source_field
+
     def process(self, state):
 
-        chunks = state.get(
-            "embedding_chunks",
-            []
-        )
+        if self.source_field not in state:
+            raise RuntimeError(
+                f"评测数据流错误: state 中缺少 {self.source_field}"
+            )
+
+        chunks = state.get(self.source_field) or []
 
         state["reranked_docs"] = chunks
 
+        return state
+
+
+class EvaluationRrfNode(RrfNode):
+    """使用显式、可落盘的权重执行与生产节点相同的 RRF 公式。"""
+
+    def process(self, state: QueryGraphState) -> QueryGraphState:
+        rrf_inputs = [
+            (
+                self._normalize_input(state.get("embedding_chunks") or []),
+                RRF_WEIGHTS["hybrid"],
+            ),
+            (
+                self._normalize_input(state.get("hyde_embedding_chunks") or []),
+                RRF_WEIGHTS["hyde"],
+            ),
+            (
+                self._normalize_input(state.get("kg_chunks") or []),
+                RRF_WEIGHTS["kg"],
+            ),
+        ]
+        merged = self._rrf_merge(rrf_inputs, self._rrf_k, self._top_k)
+        state["rrf_chunks"] = [doc for doc, _ in merged]
+        return state
+
+
+class EvaluationRerankNode(RerankNode):
+    """只为消融实验提供 cliff cutoff 开关，不改变生产节点。"""
+
+    def __init__(self, apply_cliff_cutoff: bool):
+        super().__init__()
+        self.apply_cliff_cutoff = apply_cliff_cutoff
+
+    def process(self, state: QueryGraphState) -> QueryGraphState:
+        user_query = state.get("rewritten_query", "") or state.get("original_query", "")
+        merged_docs = self._merge_multi_source_docs(state)
+        ranked_docs = self._rerank_merged_docs(user_query, merged_docs)
+        state["reranked_docs"] = (
+            self._cliff_cutoff(ranked_docs)
+            if self.apply_cliff_cutoff
+            else ranked_docs[:self.config.rerank_max_top_k]
+        )
         return state
 def warmup_embedding_model():
     """
@@ -246,7 +393,7 @@ def create_retrieval_eval_graph(mode="full") -> CompiledStateGraph:
 
         workflow.add_node(
             "normalize_result",
-            NormalizeRetrievalNode()
+            NormalizeRetrievalNode("embedding_chunks")
         )
 
         workflow.set_entry_point(
@@ -284,9 +431,9 @@ def create_retrieval_eval_graph(mode="full") -> CompiledStateGraph:
 
             "join": lambda x: {},
 
-            "rrf": RrfNode(),
+            "rrf": EvaluationRrfNode(),
 
-            "normalize_result": NormalizeRetrievalNode()
+            "normalize_result": NormalizeRetrievalNode("rrf_chunks")
         }
 
 
@@ -369,9 +516,9 @@ def create_retrieval_eval_graph(mode="full") -> CompiledStateGraph:
 
             "join": lambda x: {},
 
-            "rrf": RrfNode(),
+            "rrf": EvaluationRrfNode(),
 
-            "normalize_result": NormalizeRetrievalNode()
+            "normalize_result": NormalizeRetrievalNode("rrf_chunks")
         }
 
 
@@ -448,7 +595,11 @@ def create_retrieval_eval_graph(mode="full") -> CompiledStateGraph:
     # E: Full System
     # Hybrid + HyDE + KG + RRF + Rerank
     # ========================================================
-    elif mode == "full":
+    elif mode in {
+        "full",
+        "rrf_rerank_no_cutoff",
+        "rrf_rerank_cliff",
+    }:
 
         workflow = StateGraph(QueryGraphState)
 
@@ -465,9 +616,11 @@ def create_retrieval_eval_graph(mode="full") -> CompiledStateGraph:
 
             "join": lambda x: {},
 
-            "rrf": RrfNode(),
+            "rrf": EvaluationRrfNode(),
 
-            "rerank": RerankNode()
+            "rerank": EvaluationRerankNode(
+                apply_cliff_cutoff=(mode != "rrf_rerank_no_cutoff")
+            )
         }
 
 
@@ -688,7 +841,8 @@ def extract_chunk_ids(
 
 def evaluate_one_question(
         graph: CompiledStateGraph,
-        sample: Dict[str, Any]
+        sample: Dict[str, Any],
+        mode: str
 ) -> Dict[str, Any]:
     """
     对 evaluation_dataset 中的一道题执行 Retrieval Evaluation。
@@ -844,25 +998,33 @@ def evaluate_one_question(
         state
     )
 
-    # --------------------------------------------------------
-    # 获取 Rerank 结果
-    # --------------------------------------------------------
+    # 保存各阶段的 chunk_id，并从当前模式声明的字段读取最终结果。
+    stage_chunk_ids = {
+        field: extract_chunk_ids(result.get(field) or [])
+        for field in (
+            "embedding_chunks",
+            "hyde_embedding_chunks",
+            "kg_chunks",
+            "rrf_chunks",
+            "reranked_docs",
+        )
+        if field in result
+    }
 
-    reranked_docs = result.get(
-        "reranked_docs",
-        []
-    )
+    output_field = MODE_SPECS[mode]["output_field"]
+    if output_field not in result:
+        raise RuntimeError(
+            f"评测数据流错误: {mode} 未产生声明的输出字段 {output_field}"
+        )
 
-    if reranked_docs is None:
-
-        reranked_docs = []
+    output_docs = result.get(output_field) or []
 
     # --------------------------------------------------------
     # 提取最终 chunk_id
     # --------------------------------------------------------
 
     retrieved_chunk_ids = extract_chunk_ids(
-        reranked_docs
+        output_docs
     )
 
     # --------------------------------------------------------
@@ -995,6 +1157,10 @@ def evaluate_one_question(
             retrieved_chunk_ids
         ),
 
+        "output_field": output_field,
+
+        "stage_chunk_ids": stage_chunk_ids,
+
         "recall_at_1": (
             recall_scores[1]
         ),
@@ -1015,7 +1181,12 @@ def evaluate_one_question(
 # 5. 整个数据集评测
 # ============================================================
 
-def run_evaluation(mode="full"):
+def run_evaluation(
+        mode="full",
+        dataset=None,
+        warmup=True,
+        suite_timestamp=None
+):
     """
     执行完整 Retrieval Evaluation。
     """
@@ -1036,12 +1207,17 @@ def run_evaluation(mode="full"):
     # 0. 单线程预热 BGE-M3
     # ========================================================
 
-    warmup_embedding_model()
+    if mode not in MODE_SPECS:
+        raise ValueError(f"Unsupported evaluation mode: {mode}")
+
+    if warmup:
+        warmup_embedding_model()
     # ========================================================
     # 1. 加载数据集
     # ========================================================
 
-    dataset = load_dataset()
+    if dataset is None:
+        dataset = load_dataset()
 
     print(
         f"评测集问题数量: "
@@ -1078,7 +1254,9 @@ def run_evaluation(mode="full"):
 
             graph=graph,
 
-            sample=sample
+            sample=sample,
+
+            mode=mode
         )
 
         question_results.append(
@@ -1191,6 +1369,12 @@ def run_evaluation(mode="full"):
 
     summary = {
 
+        "mode": mode,
+
+        "group": MODE_SPECS[mode]["group"],
+
+        "label": MODE_SPECS[mode]["label"],
+
         "dataset_size": (
             len(dataset)
         ),
@@ -1263,11 +1447,7 @@ def run_evaluation(mode="full"):
         exist_ok=True
     )
 
-    timestamp = (
-        datetime.now().strftime(
-            "%Y%m%d_%H%M%S"
-        )
-    )
+    timestamp = suite_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
 
     result_path = os.path.join(
 
@@ -1275,11 +1455,45 @@ def run_evaluation(mode="full"):
 
         (
             f"retrieval_eval_"
+            f"{MODE_SPECS[mode]['group']}_"
+            f"{mode}_"
             f"{timestamp}.json"
         )
     )
 
+    config = get_config()
+    parameters = {
+        **MODE_SPECS[mode],
+        "rrf": {
+            "k": config.rrf_k,
+            "max_results": config.rrf_max_results,
+            "weights": RRF_WEIGHTS,
+            "active_weights": {
+                name: RRF_WEIGHTS[name]
+                for name in MODE_SPECS[mode]["active_retrievers"]
+                if name in RRF_WEIGHTS
+            },
+        } if MODE_SPECS[mode]["use_rrf"] else None,
+        "rerank": {
+            "max_top_k": config.rerank_max_top_k,
+            "min_top_k": config.rerank_min_top_k,
+            "gap_abs": config.rerank_gap_abs,
+            "gap_ratio": config.rerank_gap_ratio,
+            "apply_cliff_cutoff": MODE_SPECS[mode]["use_cliff_cutoff"],
+        } if MODE_SPECS[mode]["use_rerank"] else None,
+    }
+
     output = {
+
+        "mode": mode,
+
+        "group": MODE_SPECS[mode]["group"],
+
+        "label": MODE_SPECS[mode]["label"],
+
+        "dataset_path": os.path.abspath(DATASET_PATH),
+
+        "parameters": parameters,
 
         "summary": summary,
 
@@ -1313,12 +1527,381 @@ def run_evaluation(mode="full"):
         result_path
     )
 
+    output["result_path"] = os.path.abspath(result_path)
+    return output
+
+
+def _mode_parameters(mode: str) -> Dict[str, Any]:
+    config = get_config()
+    spec = MODE_SPECS[mode]
+    return {
+        **spec,
+        "rrf": {
+            "k": config.rrf_k,
+            "max_results": config.rrf_max_results,
+            "weights": dict(RRF_WEIGHTS),
+            "active_weights": {
+                name: RRF_WEIGHTS[name]
+                for name in spec["active_retrievers"]
+                if name in RRF_WEIGHTS
+            },
+        } if spec["use_rrf"] else None,
+        "rerank": {
+            "max_top_k": config.rerank_max_top_k,
+            "min_top_k": config.rerank_min_top_k,
+            "gap_abs": config.rerank_gap_abs,
+            "gap_ratio": config.rerank_gap_ratio,
+            "apply_cliff_cutoff": spec["use_cliff_cutoff"],
+        } if spec["use_rerank"] else None,
+    }
+
+
+def _score_question(
+        sample: Dict[str, Any],
+        retrieved_chunk_ids: List[str],
+        output_field: str,
+        stage_chunk_ids: Dict[str, List[str]]
+) -> Dict[str, Any]:
+    gold_chunk_ids = [str(chunk_id) for chunk_id in sample["gold_chunk_ids"]]
+    return {
+        "id": sample.get("id", ""),
+        "question": sample.get("question", ""),
+        "category": sample.get("category", ""),
+        "item_name": sample.get("item_name", ""),
+        "gold_titles": sample.get("gold_titles", []),
+        "gold_chunk_ids": gold_chunk_ids,
+        "retrieved_chunk_ids": retrieved_chunk_ids,
+        "output_field": output_field,
+        "stage_chunk_ids": stage_chunk_ids,
+        "recall_at_1": recall_at_k(retrieved_chunk_ids, gold_chunk_ids, 1),
+        "recall_at_3": recall_at_k(retrieved_chunk_ids, gold_chunk_ids, 3),
+        "recall_at_5": recall_at_k(retrieved_chunk_ids, gold_chunk_ids, 5),
+        "rr_at_5": reciprocal_rank(retrieved_chunk_ids, gold_chunk_ids, MRR_K),
+    }
+
+
+def _summarize_questions(mode: str, questions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {
+        "mode": mode,
+        "group": MODE_SPECS[mode]["group"],
+        "label": MODE_SPECS[mode]["label"],
+        "dataset_size": len(questions),
+        "mean_recall_at_1": sum(q["recall_at_1"] for q in questions) / len(questions),
+        "mean_recall_at_3": sum(q["recall_at_3"] for q in questions) / len(questions),
+        "mean_recall_at_5": sum(q["recall_at_5"] for q in questions) / len(questions),
+        "mrr_at_5": sum(q["rr_at_5"] for q in questions) / len(questions),
+    }
+
+
+def _sequence_digest(questions: List[Dict[str, Any]]) -> str:
+    payload = [
+        [question["id"], question["retrieved_chunk_ids"]]
+        for question in questions
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _compare_mode_chunk_ids(
+        results_by_mode: Dict[str, List[Dict[str, Any]]]
+) -> Dict[str, Any]:
+    comparisons = []
+    for left_index, left_mode in enumerate(FINAL_MODES):
+        left_questions = results_by_mode[left_mode]
+        for right_mode in FINAL_MODES[left_index + 1:]:
+            right_questions = results_by_mode[right_mode]
+            different_count = sum(
+                left["retrieved_chunk_ids"] != right["retrieved_chunk_ids"]
+                for left, right in zip(left_questions, right_questions)
+            )
+            comparisons.append({
+                "left_group": MODE_SPECS[left_mode]["group"],
+                "left_mode": left_mode,
+                "right_group": MODE_SPECS[right_mode]["group"],
+                "right_mode": right_mode,
+                "different_question_count": different_count,
+                "identical_all_questions": different_count == 0,
+            })
+
+    f_questions = results_by_mode["rrf_rerank_no_cutoff"]
+    g_questions = results_by_mode["rrf_rerank_cliff"]
+    cliff_is_prefix = all(
+        f["retrieved_chunk_ids"][:len(g["retrieved_chunk_ids"])]
+        == g["retrieved_chunk_ids"]
+        for f, g in zip(f_questions, g_questions)
+    )
+
+    return {
+        "sequence_sha256": {
+            mode: _sequence_digest(questions)
+            for mode, questions in results_by_mode.items()
+        },
+        "pairwise": comparisons,
+        "data_flow_assertions": {
+            "B_reads_embedding_chunks": all(
+                q["retrieved_chunk_ids"] == q["stage_chunk_ids"]["embedding_chunks"]
+                for q in results_by_mode["hybrid"]
+            ),
+            "C_reads_rrf_chunks": all(
+                q["retrieved_chunk_ids"] == q["stage_chunk_ids"]["rrf_chunks"]
+                for q in results_by_mode["hybrid_hyde"]
+            ),
+            "D_reads_rrf_chunks": all(
+                q["retrieved_chunk_ids"] == q["stage_chunk_ids"]["rrf_chunks"]
+                for q in results_by_mode["hybrid_hyde_kg"]
+            ),
+            "E_F_G_read_reranked_docs": all(
+                q["retrieved_chunk_ids"] == q["stage_chunk_ids"]["reranked_docs"]
+                for mode in ("full", "rrf_rerank_no_cutoff", "rrf_rerank_cliff")
+                for q in results_by_mode[mode]
+            ),
+            "G_is_prefix_of_F": cliff_is_prefix,
+            "E_equals_G_expected_alias": (
+                _sequence_digest(results_by_mode["full"])
+                == _sequence_digest(results_by_mode["rrf_rerank_cliff"])
+            ),
+        },
+    }
+
+
+def _candidate_pool_diagnostics(
+        questions: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """区分“候选池带来新 gold”与“融合排序把 gold 排进 Top-K”。"""
+
+    def union_ids(question, fields):
+        return list(dict.fromkeys(
+            chunk_id
+            for field in fields
+            for chunk_id in question["stage_chunk_ids"][field]
+        ))
+
+    def pool_recall(question, fields):
+        gold_ids = set(question["gold_chunk_ids"])
+        return len(set(union_ids(question, fields)) & gold_ids) / len(gold_ids)
+
+    hybrid_fields = ["embedding_chunks"]
+    hyde_fields = ["embedding_chunks", "hyde_embedding_chunks"]
+    all_fields = ["embedding_chunks", "hyde_embedding_chunks", "kg_chunks"]
+    return {
+        "metric_scope": "unordered recall over the complete candidate union; not Recall@K",
+        "mean_hybrid_candidate_recall": sum(
+            pool_recall(question, hybrid_fields) for question in questions
+        ) / len(questions),
+        "mean_hybrid_hyde_union_recall": sum(
+            pool_recall(question, hyde_fields) for question in questions
+        ) / len(questions),
+        "mean_hybrid_hyde_kg_union_recall": sum(
+            pool_recall(question, all_fields) for question in questions
+        ) / len(questions),
+        "questions_where_hyde_adds_new_gold": sum(
+            bool(
+                (set(question["stage_chunk_ids"]["hyde_embedding_chunks"])
+                 & set(question["gold_chunk_ids"]))
+                - set(question["stage_chunk_ids"]["embedding_chunks"])
+            )
+            for question in questions
+        ),
+        "questions_where_kg_adds_new_gold_beyond_hybrid_hyde": sum(
+            bool(
+                (set(question["stage_chunk_ids"]["kg_chunks"])
+                 & set(question["gold_chunk_ids"]))
+                - set(union_ids(question, hyde_fields))
+            )
+            for question in questions
+        ),
+    }
+
+
+def run_final_ablation_suite() -> Dict[str, Any]:
+    """一次召回、一次 CrossEncoder 打分，派生 A-G 的受控最终消融。"""
+    print("=" * 80)
+    print("Shopkeeper Brain Final Controlled Ablation Evaluation")
+    print("=" * 80)
+
+    warmup_embedding_model()
+    dataset = load_dataset()
+    if not dataset:
+        raise RuntimeError("评测集为空")
+
+    dense_graph = create_retrieval_eval_graph(mode="dense")
+    multi_retrieval_graph = create_retrieval_eval_graph(mode="hybrid_hyde_kg")
+    rrf_node = EvaluationRrfNode()
+    rerank_node = EvaluationRerankNode(apply_cliff_cutoff=False)
+    results_by_mode = {mode: [] for mode in FINAL_MODES}
+
+    for index, sample in enumerate(dataset, start=1):
+        question_id = sample.get("id", "")
+        question = sample.get("question", "")
+        item_name = sample.get("item_name", "")
+        gold_chunk_ids = sample.get("gold_chunk_ids") or []
+        if not question or not item_name or not gold_chunk_ids:
+            raise ValueError(f"{question_id} 缺少 question、item_name 或 gold_chunk_ids")
+
+        print(f"[{index}/{len(dataset)}] {question_id}: {question}")
+        base_state = {
+            "original_query": question,
+            "rewritten_query": question,
+            "item_names": [item_name],
+            "session_id": f"final_ablation_{question_id}_{uuid.uuid4().hex}",
+            "task_id": f"final_ablation_task_{uuid.uuid4().hex}",
+            "is_stream": False,
+        }
+
+        # A 单独执行 Dense；B/C/D 共用一次 Hybrid/HyDE/KG 召回。
+        dense_state = dense_graph.invoke(dict(base_state))
+        shared_state = multi_retrieval_graph.invoke(dict(base_state))
+
+        dense_ids = extract_chunk_ids(dense_state.get("reranked_docs") or [])
+        hybrid_ids = extract_chunk_ids(shared_state.get("embedding_chunks") or [])
+        hyde_ids = extract_chunk_ids(shared_state.get("hyde_embedding_chunks") or [])
+        kg_ids = extract_chunk_ids(shared_state.get("kg_chunks") or [])
+        rrf_d_ids = extract_chunk_ids(shared_state.get("rrf_chunks") or [])
+
+        # C 只在 D 的共享召回结果上移除 KG 输入，其他输入与参数完全不变。
+        c_state = dict(shared_state)
+        c_state["kg_chunks"] = []
+        c_state = rrf_node.process(c_state)
+        rrf_c_ids = extract_chunk_ids(c_state.get("rrf_chunks") or [])
+
+        # F/G 共用一次 CrossEncoder 打分；G 只多做 cliff cutoff。
+        merged_docs = rerank_node._merge_multi_source_docs(shared_state)
+        ranked_docs = rerank_node._rerank_merged_docs(question, merged_docs)
+        f_docs = ranked_docs[:rerank_node.config.rerank_max_top_k]
+        g_docs = rerank_node._cliff_cutoff(ranked_docs)
+        f_ids = extract_chunk_ids(f_docs)
+        g_ids = extract_chunk_ids(g_docs)
+
+        common_retrieval_stages = {
+            "embedding_chunks": hybrid_ids,
+            "hyde_embedding_chunks": hyde_ids,
+            "kg_chunks": kg_ids,
+        }
+        mode_ids_and_stages = {
+            "dense": (dense_ids, {"reranked_docs": dense_ids}),
+            "hybrid": (
+                hybrid_ids,
+                {**common_retrieval_stages, "reranked_docs": hybrid_ids},
+            ),
+            "hybrid_hyde": (
+                rrf_c_ids,
+                {**common_retrieval_stages, "rrf_chunks": rrf_c_ids, "reranked_docs": rrf_c_ids},
+            ),
+            "hybrid_hyde_kg": (
+                rrf_d_ids,
+                {**common_retrieval_stages, "rrf_chunks": rrf_d_ids, "reranked_docs": rrf_d_ids},
+            ),
+            "full": (
+                g_ids,
+                {**common_retrieval_stages, "rrf_chunks": rrf_d_ids, "reranked_docs": g_ids},
+            ),
+            "rrf_rerank_no_cutoff": (
+                f_ids,
+                {**common_retrieval_stages, "rrf_chunks": rrf_d_ids, "reranked_docs": f_ids},
+            ),
+            "rrf_rerank_cliff": (
+                g_ids,
+                {**common_retrieval_stages, "rrf_chunks": rrf_d_ids, "reranked_docs": g_ids},
+            ),
+        }
+
+        for mode, (retrieved_ids, stages) in mode_ids_and_stages.items():
+            results_by_mode[mode].append(_score_question(
+                sample=sample,
+                retrieved_chunk_ids=retrieved_ids,
+                output_field=MODE_SPECS[mode]["output_field"],
+                stage_chunk_ids=stages,
+            ))
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs(RESULT_DIR, exist_ok=True)
+    dataset_path = os.path.abspath(DATASET_PATH)
+    with open(DATASET_PATH, "rb") as dataset_file:
+        dataset_sha256 = hashlib.sha256(dataset_file.read()).hexdigest()
+
+    mode_outputs = {}
+    for mode in FINAL_MODES:
+        group = MODE_SPECS[mode]["group"]
+        mode_output = {
+            "mode": mode,
+            "group": group,
+            "label": MODE_SPECS[mode]["label"],
+            "dataset_path": dataset_path,
+            "dataset_sha256": dataset_sha256,
+            "execution_design": "shared retrieval once; shared CrossEncoder scores for F/G; E is G alias",
+            "parameters": _mode_parameters(mode),
+            "summary": _summarize_questions(mode, results_by_mode[mode]),
+            "questions": results_by_mode[mode],
+        }
+        result_path = os.path.join(
+            RESULT_DIR,
+            f"final_ablation_{group}_{mode}_{timestamp}.json",
+        )
+        mode_output["result_path"] = os.path.abspath(result_path)
+        with open(result_path, "w", encoding="utf-8") as result_file:
+            json.dump(mode_output, result_file, ensure_ascii=False, indent=2)
+        mode_outputs[mode] = mode_output
+
+    chunk_id_checks = _compare_mode_chunk_ids(results_by_mode)
+    combined_output = {
+        "experiment": "shopkeeper_brain_final_controlled_ablation",
+        "timestamp": timestamp,
+        "dataset_path": dataset_path,
+        "dataset_sha256": dataset_sha256,
+        "dataset_size": len(dataset),
+        "execution_design": {
+            "retrieval_runs_per_question": 1,
+            "dense_runs_per_question": 1,
+            "cross_encoder_score_runs_per_question": 1,
+            "E_is_alias_of_G": True,
+        },
+        "summaries": [mode_outputs[mode]["summary"] for mode in FINAL_MODES],
+        "candidate_pool_diagnostics": _candidate_pool_diagnostics(
+            results_by_mode["hybrid_hyde_kg"]
+        ),
+        "mode_result_files": {
+            mode: mode_outputs[mode]["result_path"]
+            for mode in FINAL_MODES
+        },
+        "chunk_id_checks": chunk_id_checks,
+    }
+    combined_path = os.path.join(RESULT_DIR, f"final_ablation_summary_{timestamp}.json")
+    combined_output["result_path"] = os.path.abspath(combined_path)
+    with open(combined_path, "w", encoding="utf-8") as combined_file:
+        json.dump(combined_output, combined_file, ensure_ascii=False, indent=2)
+
+    print("\n最终消融汇总")
+    for summary in combined_output["summaries"]:
+        print(
+            f"{summary['group']} {summary['label']}: "
+            f"R@1={summary['mean_recall_at_1']:.4f}, "
+            f"R@3={summary['mean_recall_at_3']:.4f}, "
+            f"R@5={summary['mean_recall_at_5']:.4f}, "
+            f"MRR@5={summary['mrr_at_5']:.4f}"
+        )
+    print(f"汇总结果: {combined_path}")
+    return combined_output
+
 
 # ============================================================
 # Main
 # ============================================================
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="运行 A-G 受控检索消融实验")
+    parser.add_argument(
+        "--dataset",
+        default="KG专项evaluation_dataset_40_final.json",
+        help="evaluation/datasets 下的数据集文件名，或绝对路径",
+    )
+    parser.add_argument(
+        "--result-subdir",
+        default="final_ablation",
+        help="evaluation/results 下的独立结果子目录",
+    )
+    args = parser.parse_args()
+    configure_evaluation_paths(args.dataset, args.result_subdir)
 
     # --------------------------------------------------------
     # 如果你希望看到各节点完整日志，
@@ -1336,10 +1919,6 @@ if __name__ == "__main__":
         # logging 初始化失败不影响 evaluation 主流程
         pass
 
-    # run_evaluation(mode="dense")
-    # run_evaluation(mode="hybrid")
-    # run_evaluation(mode="hybrid_hyde")
-    # run_evaluation(mode="hybrid_hyde_kg")
-    run_evaluation(mode="full")
+    run_final_ablation_suite()
 
 
